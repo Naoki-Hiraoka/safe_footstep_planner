@@ -68,6 +68,6 @@ target_link_libraries(draw_contours ${catkin_LIBRARIES})
 add_executable(contours_converter src/contours_converter.cpp)
 target_link_libraries(contours_converter ${catkin_LIBRARIES})
 
-set_source_files_properties(src/target_height_publisher.cpp PROPERTIES COMPILE_FLAGS -std=c++98)
+#set_source_files_properties(src/target_height_publisher.cpp PROPERTIES COMPILE_FLAGS -std=c++98)
 add_executable(target_height_publisher src/target_height_publisher.cpp)
 target_link_libraries(target_height_publisher ${catkin_LIBRARIES})
