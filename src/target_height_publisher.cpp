@@ -42,8 +42,8 @@ TargetHeightPublisher::TargetHeightPublisher() : nh_(""), pnh_("~")
     height_publisher_ = nh_.advertise<safe_footstep_planner::OnlineFootStep>("landing_height", 1);
     landing_pose_publisher_ = nh_.advertise<geometry_msgs::PoseStamped>("landing_pose", 1);
     // cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
-    // cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
-    cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative_fixed/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
+    cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
+    // cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative_fixed/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
     target_sub_ = nh_.subscribe("landing_target", 1, &TargetHeightPublisher::targetCallback, this);
     // std::cerr << "TargetHeihgtPublisher Initialized!!!!!! " << std::endl;
 }
