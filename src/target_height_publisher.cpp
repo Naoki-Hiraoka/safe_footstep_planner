@@ -98,45 +98,118 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
     Eigen::Vector3f pos_margin_front (0.04, 0, 0);
     Eigen::Vector3f pos_margin_rear (0.07, 0, 0);
     pcl::PointIndices::Ptr indices (new pcl::PointIndices);
+    pcl::PointIndices::Ptr front_indices (new pcl::PointIndices);
+    pcl::PointIndices::Ptr rear_indices (new pcl::PointIndices);
 
     // TODO rotation should be considered!
 
+    ros::Time a_time = ros::Time::now();
+
     if (cloud_) {
-        for (int i = 0; i < cloud_->size(); i++) {
-            pp = cloud_->points[i];
-            // calc front mean height
-            if (std::fabs(pp.x - (next_foot_pos(0) + pos_margin_front(0))) < threshold &&
-                std::fabs(pp.y - next_foot_pos(1)) < threshold) {
-                next_az_front += pp.z;
-                count_next_front++;
-                // TODO indices should be considered!
-                indices->indices.push_back(i);
-                next_az_vec_front.push_back(pp.z);
+        //organized点群の座標系とワールド座標系間の変換行列を求める
+        double x_x_diff = 0;
+        double x_y_diff = 0;
+        for (int y = 0; x_x_diff == 0 && x_y_diff == 0 && y < cloud_->height; y++) {
+          for (int x = 1; x_x_diff == 0 && x_y_diff == 0 && x < cloud_->width; x++) {
+            if (pcl::isFinite(cloud_->points[y*cloud_->width+x-1]) && pcl::isFinite(cloud_->points[y*cloud_->width+x])) {
+              x_x_diff = cloud_->points[y*cloud_->width+x].x - cloud_->points[y*cloud_->width+x-1].x;
+              x_y_diff = cloud_->points[y*cloud_->width+x].y - cloud_->points[y*cloud_->width+x-1].y;
+              if (!pcl::isFinite(cloud_->points[0])) {
+                cloud_->points[0].x = cloud_->points[y*cloud_->width+x].x - x_x_diff * x - (-x_y_diff * y);
+                cloud_->points[0].y = cloud_->points[y*cloud_->width+x].y - x_y_diff * x - (x_x_diff * y);
+              }
             }
-            if (std::fabs(pp.x - (cur_foot_pos(0) + pos_margin_front(0))) < threshold &&
-                std::fabs(pp.y - cur_foot_pos(1)) < threshold) {
-                cur_az_front += pp.z;
-                count_cur_front++;
-                cur_az_vec_front.push_back(pp.z);
-            }
-            // calc rear mean height
-            if (std::fabs(pp.x - (next_foot_pos(0) - pos_margin_rear(0))) < threshold &&
-                std::fabs(pp.y - next_foot_pos(1)) < threshold) {
-                next_az_rear += pp.z;
-                count_next_rear++;
-                // TODO indices should be considered!
-                indices->indices.push_back(i);
-                next_az_vec_rear.push_back(pp.z);
-            }
-            if (std::fabs(pp.x - (cur_foot_pos(0) - pos_margin_rear(0))) < threshold &&
-                std::fabs(pp.y - cur_foot_pos(1)) < threshold) {
-                cur_az_rear += pp.z;
-                count_cur_rear++;
-                cur_az_vec_rear.push_back(pp.z);
-            }
+          }
         }
+        int next_front_x, next_front_y, next_rear_x, next_rear_y;
+        int cur_front_x, cur_front_y, cur_rear_x, cur_rear_y;
+        Eigen::Matrix2d tmpmat;
+        tmpmat << x_x_diff, -x_y_diff,
+                  x_y_diff,  x_x_diff;
+        Eigen::Vector2d tmpvec;
+        Eigen::Vector2d next_front, next_rear, cur_front, cur_rear;
+        tmpvec << next_foot_pos(0) + pos_margin_front(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_front(1) - cloud_->points[0].y;
+        next_front = tmpmat.colPivHouseholderQr().solve(tmpvec);
+        tmpvec << next_foot_pos(0) + pos_margin_rear(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_rear(1) - cloud_->points[0].y;
+        next_rear = tmpmat.colPivHouseholderQr().solve(tmpvec);
+        tmpvec << cur_foot_pos(0) + pos_margin_front(0) - cloud_->points[0].x, cur_foot_pos(1) + pos_margin_front(1) - cloud_->points[0].y;
+        cur_front = tmpmat.colPivHouseholderQr().solve(tmpvec);
+        tmpvec << cur_foot_pos(0) + pos_margin_rear(0) - cloud_->points[0].x, cur_foot_pos(1) + pos_margin_rear(1) - cloud_->points[0].y;
+        cur_rear = tmpmat.colPivHouseholderQr().solve(tmpvec);
+
+        //int tmp = threshold/0.01;//heighmapの１ピクセルは1cm
+        int tmp = 3;
+        for (int x = (int)(next_front(0)) + 1 - tmp; x < (int)(next_front(0)) + 1 + tmp; x++) {
+          for (int y = (int)(next_front(1)) + 1 - tmp; y < (int)(next_front(1)) + 1 + tmp; y++) {
+            next_az_front += cloud_->points[x+y*cloud_->width].z;
+            count_next_front++;
+            front_indices->indices.push_back(x+y*cloud_->width);
+            next_az_vec_front.push_back(cloud_->points[x+y*cloud_->width].z);
+          }
+        }
+        for (int x = (int)(next_rear(0)) + 1 - tmp; x < (int)(next_rear(0)) + 1 + tmp; x++) {
+          for (int y = (int)(next_rear(1)) + 1 - tmp; y < (int)(next_rear(1)) + 1 + tmp; y++) {
+            next_az_rear += cloud_->points[x+y*cloud_->width].z;
+            count_next_rear++;
+            rear_indices->indices.push_back(x+y*cloud_->width);
+            next_az_vec_rear.push_back(cloud_->points[x+y*cloud_->width].z);
+          }
+        }
+        for (int x = (int)(cur_front(0)) + 1 - tmp; x < (int)(cur_front(0)) + 1 + tmp; x++) {
+          for (int y = (int)(cur_front(1)) + 1 - tmp; y < (int)(cur_front(1)) + 1 + tmp; y++) {
+            cur_az_front += cloud_->points[x+y*cloud_->width].z;
+            count_cur_front++;
+            front_indices->indices.push_back(x+y*cloud_->width);
+            cur_az_vec_front.push_back(cloud_->points[x+y*cloud_->width].z);
+          }
+        }
+        for (int x = (int)(cur_rear(0)) + 1 - tmp; x < (int)(cur_rear(0)) + 1 + tmp; x++) {
+          for (int y = (int)(cur_rear(1)) + 1 - tmp; y < (int)(cur_rear(1)) + 1 + tmp; y++) {
+            cur_az_rear += cloud_->points[x+y*cloud_->width].z;
+            count_cur_rear++;
+            rear_indices->indices.push_back(x+y*cloud_->width);
+            cur_az_vec_rear.push_back(cloud_->points[x+y*cloud_->width].z);
+          }
+        }
+
+
+        //for (int i = 0; i < cloud_->size(); i++) {
+        //    pp = cloud_->points[i];
+        //    // calc front mean height
+        //    if (std::fabs(pp.x - (next_foot_pos(0) + pos_margin_front(0))) < threshold &&
+        //        std::fabs(pp.y - next_foot_pos(1)) < threshold) {
+        //        next_az_front += pp.z;
+        //        count_next_front++;
+        //        // TODO indices should be considered!
+        //        front_indices->indices.push_back(i);
+        //        next_az_vec_front.push_back(pp.z);
+        //    }
+        //    if (std::fabs(pp.x - (cur_foot_pos(0) + pos_margin_front(0))) < threshold &&
+        //        std::fabs(pp.y - cur_foot_pos(1)) < threshold) {
+        //        cur_az_front += pp.z;
+        //        count_cur_front++;
+        //        cur_az_vec_front.push_back(pp.z);
+        //    }
+        //    // calc rear mean height
+        //    if (std::fabs(pp.x - (next_foot_pos(0) - pos_margin_rear(0))) < threshold &&
+        //        std::fabs(pp.y - next_foot_pos(1)) < threshold) {
+        //        next_az_rear += pp.z;
+        //        count_next_rear++;
+        //        // TODO indices should be considered!
+        //        rear_indices->indices.push_back(i);
+        //        next_az_vec_rear.push_back(pp.z);
+        //    }
+        //    if (std::fabs(pp.x - (cur_foot_pos(0) - pos_margin_rear(0))) < threshold &&
+        //        std::fabs(pp.y - cur_foot_pos(1)) < threshold) {
+        //        cur_az_rear += pp.z;
+        //        count_cur_rear++;
+        //        cur_az_vec_rear.push_back(pp.z);
+        //    }
+        //}
         // ROS_INFO("x: %f  y: %f  z: %f,  rel_pos x: %f  rel_pos y: %f, az/count: %f", landing_pos.getX(), landing_pos.getY(), landing_pos.getZ(), rel_landing_pos.getX(), rel_landing_pos.getY(), az / count);
 
+        ros::Time b_time = ros::Time::now();
+        
         // publish point
         if (count_next_front + count_next_rear > 0 && count_cur_front + count_cur_rear > 0) {
             safe_footstep_planner::OnlineFootStep ps;
@@ -161,6 +234,11 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // cur_foot_pos(2) = (std::max(cur_az_vec_front[cur_az_vec_front.size()/2],
             //                             cur_az_vec_rear[cur_az_vec_rear.size()/2]) * 2
             //                    + cur_foot_pos(2)) / 3;
+            if (next_az_vec_front[next_az_vec_front.size()/2] > next_az_vec_rear[next_az_vec_rear.size()/2]) {
+              indices = front_indices;
+            } else {
+              indices = rear_indices;
+            }
             next_foot_pos(2) = std::max(next_az_vec_front[next_az_vec_front.size()/2],
                                         next_az_vec_rear[next_az_vec_rear.size()/2]);
 
@@ -180,46 +258,46 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // std::cerr << "height: " << limited_h << std::endl;
 
             // estimage plane by RANSAC
-            // int minimun_indices = 10;
-            // pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
-            // pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
-            // pcl::SACSegmentation<pcl::PointXYZ> seg;
-            // seg.setOptimizeCoefficients (true);
-            // seg.setRadiusLimits(0.01, std::numeric_limits<double>::max ());
-            // seg.setMethodType(pcl::SAC_RANSAC);
-            // seg.setDistanceThreshold(0.1);
-            // seg.setModelType(pcl::SACMODEL_PLANE);
-            // seg.setInputCloud(cloud_);
-            // //
-            // seg.setIndices(indices);
-            // seg.setMaxIterations(100);
-            // seg.segment(*inliers, *coefficients);
+            int minimun_indices = 10;
+            pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
+            pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+            pcl::SACSegmentation<pcl::PointXYZ> seg;
+            seg.setOptimizeCoefficients (true);
+            seg.setRadiusLimits(0.01, std::numeric_limits<double>::max ());
+            seg.setMethodType(pcl::SAC_RANSAC);
+            seg.setDistanceThreshold(0.1);
+            seg.setModelType(pcl::SACMODEL_PLANE);
+            seg.setInputCloud(cloud_);
+            //
+            seg.setIndices(indices);
+            seg.setMaxIterations(100);
+            seg.segment(*inliers, *coefficients);
 
-            // if (inliers->indices.size() == 0) {
-            //     std::cerr <<  " no plane" << std::endl;
-            // }
-            // else if (inliers->indices.size() < minimun_indices) {
-            //     std::cerr <<  " no enough inliners " << inliers->indices.size() <<  std::endl;
-            // }
-            // else {
-            //     jsk_recognition_utils::Plane plane(coefficients->values);
-            //     if (!plane.isSameDirection(ez)) {
-            //         plane = plane.flip();
-            //     }
-            //     Eigen::Vector3f next_n = plane.getNormal();
-            //     next_n = cur_foot_rot.transpose() * next_n; // cur_foot relative
+            if (inliers->indices.size() == 0) {
+                std::cerr <<  " no plane" << std::endl;
+            }
+            else if (inliers->indices.size() < minimun_indices) {
+                std::cerr <<  " no enough inliners " << inliers->indices.size() <<  std::endl;
+            }
+            else {
+                jsk_recognition_utils::Plane plane(coefficients->values);
+                if (!plane.isSameDirection(ez)) {
+                    plane = plane.flip();
+                }
+                Eigen::Vector3f next_n = plane.getNormal();
+                next_n = cur_foot_rot.transpose() * next_n; // cur_foot relative
 
-            //     // ps.nx =  next_n(0);
-            //     // ps.ny =  next_n(1);
-            //     // ps.nz =  next_n(2);
-            //     ps.nx =  0;
-            //     ps.ny =  0;
-            //     ps.nz =  1;
-            // }
+                ps.nx =  next_n(0);
+                ps.ny =  next_n(1);
+                ps.nz =  next_n(2);
+                //ps.nx =  0;
+                //ps.ny =  0;
+                //ps.nz =  1;
+            }
             // ======= omori add 2020/02/16 ===========
-            ps.nx =  0;
-            ps.ny =  0;
-            ps.nz =  1;
+            //ps.nx =  0;
+            //ps.ny =  0;
+            //ps.nz =  1;
             // ========================================
             height_publisher_.publish(ps);
 
@@ -236,6 +314,10 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
 
             landing_pose_publisher_.publish(pose_msg);
         }
+        ros::Time c_time = ros::Time::now();
+        std::cout << "landing_height_publisher" << std::endl;
+        std::cout << "a_b  " << (b_time - a_time).sec << "s " << (int)((b_time - a_time).nsec / 1000000) << "ms" << std::endl;
+        std::cout << "b_c  " << (c_time - b_time).sec << "s " << (int)((c_time - b_time).nsec / 1000000) << "ms" << std::endl;
     }
 }
 
