@@ -97,7 +97,7 @@ void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::Onlin
     Eigen::Vector2d tmp;
     tmp = tmpmat.colPivHouseholderQr().solve(tmpvec);
     cur_foot_pos[2] = median_image_.at<cv::Vec3f>((int)(tmp[1]), (int)(tmp[0]))[2];
-    std::cout << x_x_diff << " " << x_y_diff << "  " << cur_foot_pos[0] << " " << cur_foot_pos[1] << "  " << median_image_.at<cv::Vec3f>(0, 0)[0] << " " << median_image_.at<cv::Vec3f>(0, 0)[1] << " " << median_image_.at<cv::Vec3f>(0, 0)[2] << "  " << tmp[0] << " " << tmp[1] << "  " << cur_foot_pos[2] << std::endl;
+    //std::cout << x_x_diff << " " << x_y_diff << "  " << cur_foot_pos[0] << " " << cur_foot_pos[1] << "  " << median_image_.at<cv::Vec3f>(0, 0)[0] << " " << median_image_.at<cv::Vec3f>(0, 0)[1] << " " << median_image_.at<cv::Vec3f>(0, 0)[2] << "  " << tmp[0] << " " << tmp[1] << "  " << cur_foot_pos[2] << std::endl;
   }
 
   // convert to polygon relative to leg_end_coords
@@ -391,16 +391,16 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   image_publisher_.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", image).toImageMsg());
 
   ros::Time end_time = ros::Time::now();
-  std::cout << "all_time " << (end_time - begin_time).sec << "s " << (int)((end_time - begin_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "begin_a  " << (a_time - begin_time).sec << "s " << (int)((a_time - begin_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "a_b  " << (b_time - a_time).sec << "s " << (int)((b_time - a_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "b_c  " << (c_time - b_time).sec << "s " << (int)((c_time - b_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "c_d  " << (d_time - c_time).sec << "s " << (int)((d_time - c_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "d_e  " << (e_time - d_time).sec << "s " << (int)((e_time - d_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "e_f  " << (f_time - e_time).sec << "s " << (int)((f_time - e_time).nsec / 1000000) << "ms" << std::endl;
-  std::cout << "f_end  " << (end_time - f_time).sec << "s " << (int)((end_time - f_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "all_time " << (end_time - begin_time).sec << "s " << (int)((end_time - begin_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "begin_a  " << (a_time - begin_time).sec << "s " << (int)((a_time - begin_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "a_b  " << (b_time - a_time).sec << "s " << (int)((b_time - a_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "b_c  " << (c_time - b_time).sec << "s " << (int)((c_time - b_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "c_d  " << (d_time - c_time).sec << "s " << (int)((d_time - c_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "d_e  " << (e_time - d_time).sec << "s " << (int)((e_time - d_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "e_f  " << (f_time - e_time).sec << "s " << (int)((f_time - e_time).nsec / 1000000) << "ms" << std::endl;
+  //std::cout << "f_end  " << (end_time - f_time).sec << "s " << (int)((end_time - f_time).nsec / 1000000) << "ms" << std::endl;
 
-  std::cout << x_x_diff << " " << x_y_diff << " " << y_x_diff << " " << y_y_diff << std::endl;
+  //std::cout << x_x_diff << " " << x_y_diff << " " << y_x_diff << " " << y_y_diff << std::endl;
 
 
 

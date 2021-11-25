@@ -2,7 +2,7 @@
 #include <std_msgs/Header.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <geometry_msgs/PointStamped.h>
-#include <geometry_msgs/PoseStamped.h>
+//#include <geometry_msgs/PoseStamped.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
@@ -13,6 +13,8 @@
 #include <jsk_recognition_utils/geo_util.h>
 #include <safe_footstep_planner/OnlineFootStep.h>
 #include <safe_footstep_planner/safe_footstep_util.h>
+#include <visualization_msgs/Marker.h>
+
 
 class TargetHeightPublisher
 {
@@ -40,7 +42,8 @@ private:
 TargetHeightPublisher::TargetHeightPublisher() : nh_(""), pnh_("~")
 {
     height_publisher_ = nh_.advertise<safe_footstep_planner::OnlineFootStep>("landing_height", 1);
-    landing_pose_publisher_ = nh_.advertise<geometry_msgs::PoseStamped>("landing_pose", 1);
+    //landing_pose_publisher_ = nh_.advertise<geometry_msgs::PoseStamped>("landing_pose", 1);
+    landing_pose_publisher_ = nh_.advertise<visualization_msgs::Marker>("landing_pose_marker", 1);
     // cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
     cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
     // cloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative_fixed/output", 1, &TargetHeightPublisher::pointcloudCallback, this);
@@ -90,13 +93,16 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
     // int count_cur = 0, count_next = 0;
     int count_cur_front = 0, count_next_front = 0;
     int count_cur_rear = 0, count_next_rear = 0;
-    std::vector<double>  next_az_vec, cur_az_vec;
-    std::vector<double>  next_az_vec_front, cur_az_vec_front;
-    std::vector<double>  next_az_vec_rear, cur_az_vec_rear;
+    //std::vector<double>  next_az_vec, cur_az_vec;
+    std::vector<pcl::PointXYZ>  next_az_vec_front, cur_az_vec_front;
+    std::vector<pcl::PointXYZ>  next_az_vec_rear, cur_az_vec_rear;
+    std::vector<pcl::PointXYZ>  next_az_vec_left, next_az_vec_right;
     pcl::PointXYZ pp;
     // Eigen::Vector3f pos_margin (0.05, 0, 0);
     Eigen::Vector3f pos_margin_front (0.04, 0, 0);
-    Eigen::Vector3f pos_margin_rear (0.07, 0, 0);
+    Eigen::Vector3f pos_margin_rear (-0.07, 0, 0);
+    Eigen::Vector3f pos_margin_left (0.0, 0.04, 0);
+    Eigen::Vector3f pos_margin_right (0.0, -0.04, 0);
     pcl::PointIndices::Ptr indices (new pcl::PointIndices);
     pcl::PointIndices::Ptr front_indices (new pcl::PointIndices);
     pcl::PointIndices::Ptr rear_indices (new pcl::PointIndices);
@@ -127,7 +133,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
         tmpmat << x_x_diff, -x_y_diff,
                   x_y_diff,  x_x_diff;
         Eigen::Vector2d tmpvec;
-        Eigen::Vector2d next_front, next_rear, cur_front, cur_rear;
+        Eigen::Vector2d next_front, next_rear, next_left, next_right, cur_front, cur_rear;
         tmpvec << next_foot_pos(0) + pos_margin_front(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_front(1) - cloud_->points[0].y;
         next_front = tmpmat.colPivHouseholderQr().solve(tmpvec);
         tmpvec << next_foot_pos(0) + pos_margin_rear(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_rear(1) - cloud_->points[0].y;
@@ -136,15 +142,19 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
         cur_front = tmpmat.colPivHouseholderQr().solve(tmpvec);
         tmpvec << cur_foot_pos(0) + pos_margin_rear(0) - cloud_->points[0].x, cur_foot_pos(1) + pos_margin_rear(1) - cloud_->points[0].y;
         cur_rear = tmpmat.colPivHouseholderQr().solve(tmpvec);
+        tmpvec << next_foot_pos(0) + pos_margin_left(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_left(1) - cloud_->points[0].y;
+        next_left = tmpmat.colPivHouseholderQr().solve(tmpvec);
+        tmpvec << next_foot_pos(0) + pos_margin_right(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_right(1) - cloud_->points[0].y;
+        next_right = tmpmat.colPivHouseholderQr().solve(tmpvec);
 
         //int tmp = threshold/0.01;//heighmapの１ピクセルは1cm
-        int tmp = 3;
+        int tmp = 5;
         for (int x = (int)(next_front(0)) + 1 - tmp; x < (int)(next_front(0)) + 1 + tmp; x++) {
           for (int y = (int)(next_front(1)) + 1 - tmp; y < (int)(next_front(1)) + 1 + tmp; y++) {
             next_az_front += cloud_->points[x+y*cloud_->width].z;
             count_next_front++;
             front_indices->indices.push_back(x+y*cloud_->width);
-            next_az_vec_front.push_back(cloud_->points[x+y*cloud_->width].z);
+            next_az_vec_front.push_back(cloud_->points[x+y*cloud_->width]);
           }
         }
         for (int x = (int)(next_rear(0)) + 1 - tmp; x < (int)(next_rear(0)) + 1 + tmp; x++) {
@@ -152,7 +162,17 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             next_az_rear += cloud_->points[x+y*cloud_->width].z;
             count_next_rear++;
             rear_indices->indices.push_back(x+y*cloud_->width);
-            next_az_vec_rear.push_back(cloud_->points[x+y*cloud_->width].z);
+            next_az_vec_rear.push_back(cloud_->points[x+y*cloud_->width]);
+          }
+        }
+        for (int x = (int)(next_left(0)) + 1 - tmp; x < (int)(next_left(0)) + 1 + tmp; x++) {
+          for (int y = (int)(next_left(1)) + 1 - tmp; y < (int)(next_left(1)) + 1 + tmp; y++) {
+            next_az_vec_left.push_back(cloud_->points[x+y*cloud_->width]);
+          }
+        }
+        for (int x = (int)(next_right(0)) + 1 - tmp; x < (int)(next_right(0)) + 1 + tmp; x++) {
+          for (int y = (int)(next_right(1)) + 1 - tmp; y < (int)(next_right(1)) + 1 + tmp; y++) {
+            next_az_vec_right.push_back(cloud_->points[x+y*cloud_->width]);
           }
         }
         for (int x = (int)(cur_front(0)) + 1 - tmp; x < (int)(cur_front(0)) + 1 + tmp; x++) {
@@ -160,7 +180,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             cur_az_front += cloud_->points[x+y*cloud_->width].z;
             count_cur_front++;
             front_indices->indices.push_back(x+y*cloud_->width);
-            cur_az_vec_front.push_back(cloud_->points[x+y*cloud_->width].z);
+            cur_az_vec_front.push_back(cloud_->points[x+y*cloud_->width]);
           }
         }
         for (int x = (int)(cur_rear(0)) + 1 - tmp; x < (int)(cur_rear(0)) + 1 + tmp; x++) {
@@ -168,7 +188,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             cur_az_rear += cloud_->points[x+y*cloud_->width].z;
             count_cur_rear++;
             rear_indices->indices.push_back(x+y*cloud_->width);
-            cur_az_vec_rear.push_back(cloud_->points[x+y*cloud_->width].z);
+            cur_az_vec_rear.push_back(cloud_->points[x+y*cloud_->width]);
           }
         }
 
@@ -223,37 +243,26 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // cur_foot_pos(2) = cur_az / static_cast<double>(count_cur);
             // next_foot_pos(2) = next_az / static_cast<double>(count_next);
             // median
-            std::sort(next_az_vec_front.begin(), next_az_vec_front.end());
-            std::sort(cur_az_vec_front.begin(), cur_az_vec_front.end());
-            std::sort(next_az_vec_rear.begin(), next_az_vec_rear.end());
-            std::sort(cur_az_vec_rear.begin(), cur_az_vec_rear.end());
+            std::sort(next_az_vec_front.begin(), next_az_vec_front.end(), [](pcl::PointXYZ a, pcl::PointXYZ b) { return (a.z > b.z); });
+            std::sort(cur_az_vec_front.begin(), cur_az_vec_front.end(), [](pcl::PointXYZ a, pcl::PointXYZ b) { return (a.z > b.z); });
+            std::sort(next_az_vec_rear.begin(), next_az_vec_rear.end(), [](pcl::PointXYZ a, pcl::PointXYZ b) { return (a.z > b.z); });
+            std::sort(cur_az_vec_rear.begin(), cur_az_vec_rear.end(), [](pcl::PointXYZ a, pcl::PointXYZ b) { return (a.z > b.z); });
+            std::sort(next_az_vec_left.begin(), next_az_vec_left.end(), [](pcl::PointXYZ a, pcl::PointXYZ b) { return (a.z > b.z); });
+            std::sort(next_az_vec_right.begin(), next_az_vec_right.end(), [](pcl::PointXYZ a, pcl::PointXYZ b) { return (a.z > b.z); });
 
-            cur_foot_pos(2) = std::max(cur_az_vec_front[cur_az_vec_front.size()/2],
-                                       cur_az_vec_rear[cur_az_vec_rear.size()/2]);
+            cur_foot_pos(2) = std::max(cur_az_vec_front[cur_az_vec_front.size()/4].z,
+                                       cur_az_vec_rear[cur_az_vec_rear.size()/4].z);
             // omori comment out on 2020/12/24
             // cur_foot_pos(2) = (std::max(cur_az_vec_front[cur_az_vec_front.size()/2],
             //                             cur_az_vec_rear[cur_az_vec_rear.size()/2]) * 2
             //                    + cur_foot_pos(2)) / 3;
-            if (next_az_vec_front[next_az_vec_front.size()/2] > next_az_vec_rear[next_az_vec_rear.size()/2]) {
+            std::cout << "next_az_vec: " << next_az_vec_front[next_az_vec_front.size()/4].z << " " << next_az_vec_rear[next_az_vec_rear.size()/4].z << std::endl;
+            if (next_az_vec_front[next_az_vec_front.size()/4].z > next_az_vec_rear[next_az_vec_rear.size()/4].z) {
               indices = front_indices;
             } else {
               indices = rear_indices;
             }
-            next_foot_pos(2) = std::max(next_az_vec_front[next_az_vec_front.size()/2],
-                                        next_az_vec_rear[next_az_vec_rear.size()/2]);
 
-            Eigen::Vector3f tmp_pos;
-            tmp_pos = cur_foot_rot.transpose() * (next_foot_pos - cur_foot_pos);
-            ps.x = tmp_pos(0);
-            ps.y = tmp_pos(1);
-            // target height range is -0.2 <= target_height <= 0.2
-
-
-            if (std::abs(tmp_pos(2)) >= 0.2 || !std::isfinite(tmp_pos(2))) return;
-            // double limited_h = std::min(0.2, std::max(-0.2,static_cast<double>(tmp_pos(2))));
-            // ps.z = limited_h;
-
-            ps.z = tmp_pos(2);
             ps.l_r = msg->l_r;
             // std::cerr << "height: " << limited_h << std::endl;
 
@@ -287,13 +296,58 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
                 Eigen::Vector3f next_n = plane.getNormal();
                 next_n = cur_foot_rot.transpose() * next_n; // cur_foot relative
 
-                ps.nx =  next_n(0);
-                ps.ny =  next_n(1);
-                ps.nz =  next_n(2);
+                if (next_n(2) < 0.85) { //平面おかしい
+                  ps.nx =  0;
+                  ps.ny =  0;
+                  ps.nz =  1;
+                  std::cout << "too steep slope " << next_n(2) << std::endl;
+                } else {
+                  ps.nx =  next_n(0);
+                  ps.ny =  next_n(1);
+                  ps.nz =  next_n(2);
+                }
                 //ps.nx =  0;
                 //ps.ny =  0;
                 //ps.nz =  1;
             }
+
+            //Eigen::Vector3f next_n = (Eigen::Vector3f(
+            //next_az_vec_front[next_az_vec_front.size()/4].x - next_az_vec_rear[next_az_vec_rear.size()/4].x,
+            //next_az_vec_front[next_az_vec_front.size()/4].y - next_az_vec_rear[next_az_vec_rear.size()/4].y,
+            //next_az_vec_front[next_az_vec_front.size()/4].z - next_az_vec_rear[next_az_vec_rear.size()/4].z
+            //)).cross(Eigen::Vector3f(
+            //next_az_vec_left[next_az_vec_left.size()/4].x - next_az_vec_right[next_az_vec_right.size()/4].x,
+            //next_az_vec_left[next_az_vec_left.size()/4].y - next_az_vec_right[next_az_vec_right.size()/4].y,
+            //next_az_vec_left[next_az_vec_left.size()/4].z - next_az_vec_right[next_az_vec_right.size()/4].z
+            //));
+            //next_n.normalize();
+            //ps.nx =  next_n(0);
+            //ps.ny =  next_n(1);
+            //ps.nz =  next_n(2);
+            //std::cout << ps.nx << " " << ps.ny << " " << ps.nz << std::endl;
+
+            if (ps.nz != 0) {
+              if (next_az_vec_front[next_az_vec_front.size()/4].z > next_az_vec_rear[next_az_vec_rear.size()/4].z) {
+                next_foot_pos(2) = next_az_vec_front[next_az_vec_front.size()/4].z + (next_az_vec_front[next_az_vec_front.size()/4].x - next_foot_pos(0)) * ps.nx / ps.nz + (next_az_vec_front[next_az_vec_front.size()/4].y - next_foot_pos(1)) * ps.ny / ps.nz;
+              } else {
+                next_foot_pos(2) = next_az_vec_rear[next_az_vec_rear.size()/4].z + (next_az_vec_rear[next_az_vec_rear.size()/4].x - next_foot_pos(0)) * ps.nx / ps.nz + (next_az_vec_rear[next_az_vec_rear.size()/4].y - next_foot_pos(1)) * ps.ny / ps.nz;
+              }
+            } else {
+              next_foot_pos(2) = std::max(next_az_vec_front[next_az_vec_front.size()/4].z, next_az_vec_rear[next_az_vec_rear.size()/4].z);
+            }
+
+            Eigen::Vector3f tmp_pos;
+            tmp_pos = cur_foot_rot.transpose() * (next_foot_pos - cur_foot_pos);
+            ps.x = tmp_pos(0);
+            ps.y = tmp_pos(1);
+            // target height range is -0.2 <= target_height <= 0.2
+
+
+            if (std::abs(tmp_pos(2)) >= 0.2 || !std::isfinite(tmp_pos(2))) return;
+            // double limited_h = std::min(0.2, std::max(-0.2,static_cast<double>(tmp_pos(2))));
+            // ps.z = limited_h;
+
+            ps.z = tmp_pos(2);
             // ======= omori add 2020/02/16 ===========
             //ps.nx =  0;
             //ps.ny =  0;
@@ -301,16 +355,38 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // ========================================
             height_publisher_.publish(ps);
 
+            Eigen::Vector3f start_pos;
+            start_pos = tmp_cur_foot_rot.transpose() * cur_foot_rot * Eigen::Vector3f(ps.x, ps.y, ps.z);
+            Eigen::Vector3f end_pos;
+            end_pos = tmp_cur_foot_rot.transpose() * cur_foot_rot * Eigen::Vector3f(ps.x+0.3*ps.nx, ps.y+0.3*ps.ny, ps.z+0.3*ps.nz);
+
+
             // publish pose msg for visualize
-            geometry_msgs::PoseStamped pose_msg;
+            visualization_msgs::Marker pose_msg;
             pose_msg.header = ps.header;
-            pose_msg.pose.position.x = ps.x;
-            pose_msg.pose.position.y = ps.y;
-            pose_msg.pose.position.z = ps.z;
-            pose_msg.pose.orientation.x = 0;
-            pose_msg.pose.orientation.y = -0.7071068;
-            pose_msg.pose.orientation.z = 0;
-            pose_msg.pose.orientation.w = 0.7071068;
+            pose_msg.ns = "landing_pose";
+            pose_msg.id = 0;
+            pose_msg.lifetime = ros::Duration();
+            pose_msg.type = visualization_msgs::Marker::ARROW;
+            pose_msg.action = visualization_msgs::Marker::ADD;
+            geometry_msgs::Point start;
+            start.x = start_pos(0);
+            start.y = start_pos(1);
+            start.z = start_pos(2);
+            geometry_msgs::Point end;
+            end.x = end_pos(0);
+            end.y = end_pos(1);
+            end.z = end_pos(2);
+            pose_msg.points.push_back(start);
+            pose_msg.points.push_back(end);
+            pose_msg.color.r = 0.0;
+            pose_msg.color.g = 0.8;
+            pose_msg.color.b = 1.0;
+            pose_msg.color.a = 1.0;
+            pose_msg.scale.x = 0.03;
+            pose_msg.scale.y = 0.05;
+            pose_msg.scale.z = 0.07;
+            pose_msg.pose.orientation.w = 1.0;
 
             landing_pose_publisher_.publish(pose_msg);
         }
