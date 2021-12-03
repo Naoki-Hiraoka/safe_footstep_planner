@@ -218,11 +218,11 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   cv::Mat binarized_image = cv::Mat::zeros(250, 250, CV_8UC1);
   cv::Mat image = cv::Mat::zeros(250, 250, CV_8UC3);
   int steppable_range = 3;
-  float steppable_edge_height = steppable_range*0.02*std::tan(0.28);
-  float steppable_corner_height = steppable_range*0.02*std::sqrt(2)*std::tan(0.28);
+  float steppable_edge_height = steppable_range*0.02*std::tan(0.33);
+  float steppable_corner_height = steppable_range*0.02*std::sqrt(2)*std::tan(0.33);
   float steppable_around_edge_range = 18.0/2;//[cm]/[cm]
   float steppable_around_corner_range = (int)(18.0/std::sqrt(8));//[cm]/[cm]
-  float steppable_around_height_diff = 0.03;//[m]
+  float steppable_around_height_diff = 0.05;//[m]
 
   for (int x = (int)(steppable_around_edge_range); x < (250-(int)(steppable_around_edge_range)); x++) {
     for (int y = (int)(steppable_around_edge_range); y < (250-(int)(steppable_around_edge_range)); y++) {
@@ -304,7 +304,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
 
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_CLOSE, cv::noArray(), cv::Point(-1, -1), 2);
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN,  cv::noArray(), cv::Point(-1, -1), 2);
-  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 2);
+  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 3);
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN, cv::noArray(), cv::Point(-1, -1), 2);
   std::vector<std::vector<cv::Point>> contours;
   std::vector<cv::Vec4i> hierarchy;
@@ -317,7 +317,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
     if (hierarchy[j][3] == -1) { //外側
       if (cv::contourArea(contours[j]) > size_threshold) {
         std::vector<cv::Point> approx;
-        cv::approxPolyDP(contours[j], approx, 2.5, true);
+        cv::approxPolyDP(contours[j], approx, 1.5, true);
         if (approx.size() >= 3) {
           approx_vector.push_back(approx);
           TPPLPoly poly;
