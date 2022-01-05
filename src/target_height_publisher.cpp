@@ -256,7 +256,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // cur_foot_pos(2) = (std::max(cur_az_vec_front[cur_az_vec_front.size()/2],
             //                             cur_az_vec_rear[cur_az_vec_rear.size()/2]) * 2
             //                    + cur_foot_pos(2)) / 3;
-            std::cout << "next_az_vec: " << next_az_vec_front[next_az_vec_front.size()/4].z << " " << next_az_vec_rear[next_az_vec_rear.size()/4].z << std::endl;
+            //std::cout << "next_az_vec: " << next_az_vec_front[next_az_vec_front.size()/4].z << " " << next_az_vec_rear[next_az_vec_rear.size()/4].z << std::endl;
             if (next_az_vec_front[next_az_vec_front.size()/4].z > next_az_vec_rear[next_az_vec_rear.size()/4].z) {
               indices = front_indices;
             } else {
@@ -296,7 +296,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
                 Eigen::Vector3f next_n = plane.getNormal();
                 next_n = cur_foot_rot.transpose() * next_n; // cur_foot relative
 
-                if (next_n(2) < 0.85) { //平面おかしい
+                if (next_n(2) < 0.8) { //平面おかしい
                   ps.nx =  0;
                   ps.ny =  0;
                   ps.nz =  1;
@@ -306,9 +306,9 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
                   ps.ny =  next_n(1);
                   ps.nz =  next_n(2);
                 }
-                //ps.nx =  0;
-                //ps.ny =  0;
-                //ps.nz =  1;
+                ps.nx =  0;
+                ps.ny =  0;
+                ps.nz =  1;
             }
 
             //Eigen::Vector3f next_n = (Eigen::Vector3f(
@@ -348,12 +348,13 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // ps.z = limited_h;
 
             ps.z = tmp_pos(2);
+            ps.z = 0;
             // ======= omori add 2020/02/16 ===========
             //ps.nx =  0;
             //ps.ny =  0;
             //ps.nz =  1;
             // ========================================
-            height_publisher_.publish(ps);
+            //height_publisher_.publish(ps);
 
             Eigen::Vector3f start_pos;
             start_pos = tmp_cur_foot_rot.transpose() * cur_foot_rot * Eigen::Vector3f(ps.x, ps.y, ps.z);

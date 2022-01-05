@@ -15,6 +15,7 @@
 #include <safe_footstep_planner/SteppableRegion.h>
 #include <safe_footstep_planner/PolygonArray.h>
 #include <safe_footstep_planner/safe_footstep_util.h>
+#include <jsk_recognition_msgs/PolygonArray.h>
 #include "polypartition.h"
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
@@ -35,6 +36,7 @@ private:
   ros::Subscriber target_sub_;
   ros::Subscriber pointcloud_sub_;
   ros::Publisher region_publisher_;
+  ros::Publisher visualized_region_publisher_;
   ros::Publisher combined_mesh_publisher_;
   ros::Publisher image_publisher_;
   ros::Publisher polygon_publisher_;
@@ -53,6 +55,7 @@ private:
 SteppableRegionPublisher::SteppableRegionPublisher() : nh_(""), pnh_("~")
 {
   region_publisher_ = nh_.advertise<safe_footstep_planner::SteppableRegion>("steppable_region", 1);
+  visualized_region_publisher_ = nh_.advertise<jsk_recognition_msgs::PolygonArray>("visualized_steppable_region", 1);
   combined_mesh_publisher_ = nh_.advertise<safe_footstep_planner::PolygonArray>("combined_meshed_polygons", 1);
   image_publisher_ = nh_.advertise<sensor_msgs::Image> ("output", 1);
   polygon_publisher_ = nh_.advertise<jsk_recognition_msgs::PolygonArray> ("output_polygon", 1);
@@ -69,6 +72,7 @@ SteppableRegionPublisher::SteppableRegionPublisher() : nh_(""), pnh_("~")
 void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::OnlineFootStep::ConstPtr& msg)
 {
   safe_footstep_planner::SteppableRegion sr;
+  jsk_recognition_msgs::PolygonArray sr_vis;
   std::string target_frame;
   if (msg->l_r) {
     target_frame = "/lleg_end_coords";
@@ -100,25 +104,31 @@ void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::Onlin
     //std::cout << x_x_diff << " " << x_y_diff << "  " << cur_foot_pos[0] << " " << cur_foot_pos[1] << "  " << median_image_.at<cv::Vec3f>(0, 0)[0] << " " << median_image_.at<cv::Vec3f>(0, 0)[1] << " " << median_image_.at<cv::Vec3f>(0, 0)[2] << "  " << tmp[0] << " " << tmp[1] << "  " << cur_foot_pos[2] << std::endl;
   }
 
-  // convert to polygon relative to leg_end_coords
-  size_t convex_num(combined_meshes_.polygons.size());
-  sr.polygons.resize(convex_num);
-  for (size_t i = 0; i < convex_num; i++) {
-    size_t vs_num(combined_meshes_.polygons[i].points.size());
-    sr.polygons[i].polygon.points.resize(vs_num);
-    for (size_t j = 0; j < vs_num; j++) {
-      safe_footstep_util::transformPoint(combined_meshes_.polygons[i].points[j], cur_foot_rot, cur_foot_pos, sr.polygons[i].polygon.points[j]);
-    }
-  }
-
   std_msgs::Header header;
   header.frame_id = target_frame.substr(1, target_frame.length() - 1);
   // header.stamp = ros::Time::now();
   header.stamp = ros::Time(0);
   sr.header = header;
   sr.l_r = msg->l_r;
+  sr_vis.header = header;
+
+  // convert to polygon relative to leg_end_coords
+  size_t convex_num(combined_meshes_.polygons.size());
+  sr.polygons.resize(convex_num);
+  sr_vis.polygons.resize(convex_num);
+  for (size_t i = 0; i < convex_num; i++) {
+    size_t vs_num(combined_meshes_.polygons[i].points.size());
+    sr.polygons[i].polygon.points.resize(vs_num);
+    sr_vis.polygons[i].polygon.points.resize(vs_num);
+    for (size_t j = 0; j < vs_num; j++) {
+      safe_footstep_util::transformPoint(combined_meshes_.polygons[i].points[j], cur_foot_rot, cur_foot_pos, sr.polygons[i].polygon.points[j]);
+      safe_footstep_util::transformPoint(combined_meshes_.polygons[i].points[j], tmp_cur_foot_rot, cur_foot_pos, sr_vis.polygons[i].polygon.points[j]);
+    }
+    sr_vis.polygons[i].header = header;
+  }
 
   region_publisher_.publish(sr);
+  visualized_region_publisher_.publish(sr_vis);
 }
 
 void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& input)
@@ -218,10 +228,10 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   cv::Mat binarized_image = cv::Mat::zeros(250, 250, CV_8UC1);
   cv::Mat image = cv::Mat::zeros(250, 250, CV_8UC3);
   int steppable_range = 3;
-  float steppable_edge_height = steppable_range*0.02*std::tan(0.33);
-  float steppable_corner_height = steppable_range*0.02*std::sqrt(2)*std::tan(0.33);
-  float steppable_around_edge_range = 18.0/2;//[cm]/[cm]
-  float steppable_around_corner_range = (int)(18.0/std::sqrt(8));//[cm]/[cm]
+  float steppable_edge_height = steppable_range*0.02*std::tan(0.33); //0.33
+  float steppable_corner_height = steppable_range*0.02*std::sqrt(2)*std::tan(0.33);//0.33
+  float steppable_around_edge_range = 12.0/2;//[cm]/[cm] 18
+  float steppable_around_corner_range = (int)(12.0/std::sqrt(8));//[cm]/[cm]
   float steppable_around_height_diff = 0.05;//[m]
 
   for (int x = (int)(steppable_around_edge_range); x < (250-(int)(steppable_around_edge_range)); x++) {
@@ -303,9 +313,9 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   std::list<TPPLPoly> polys, result;
 
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_CLOSE, cv::noArray(), cv::Point(-1, -1), 2);
-  cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN,  cv::noArray(), cv::Point(-1, -1), 2);
-  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 3);
-  cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN, cv::noArray(), cv::Point(-1, -1), 2);
+  cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN,  cv::noArray(), cv::Point(-1, -1), 1);
+  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 1);//3
+  cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN, cv::noArray(), cv::Point(-1, -1), 1);
   std::vector<std::vector<cv::Point>> contours;
   std::vector<cv::Vec4i> hierarchy;
   cv::findContours(binarized_image, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
@@ -317,7 +327,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
     if (hierarchy[j][3] == -1) { //外側
       if (cv::contourArea(contours[j]) > size_threshold) {
         std::vector<cv::Point> approx;
-        cv::approxPolyDP(contours[j], approx, 1.5, true);
+        cv::approxPolyDP(contours[j], approx, 1.5, true);//1.5
         if (approx.size() >= 3) {
           approx_vector.push_back(approx);
           TPPLPoly poly;
@@ -332,7 +342,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
     } else { //穴
       if (cv::contourArea(contours[j]) > size_threshold) {
         std::vector<cv::Point> approx;
-        cv::approxPolyDP(contours[j], approx, 2.0, true);
+        cv::approxPolyDP(contours[j], approx, 1.0, true);
         if (approx.size() >= 3) {
           approx_vector.push_back(approx);
           TPPLPoly poly;
