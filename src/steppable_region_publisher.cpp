@@ -61,8 +61,8 @@ SteppableRegionPublisher::SteppableRegionPublisher() : nh_(""), pnh_("~")
   polygon_publisher_ = nh_.advertise<jsk_recognition_msgs::PolygonArray> ("output_polygon", 1);
   target_sub_ = nh_.subscribe("landing_target", 1, &SteppableRegionPublisher::targetCallback, this);
   pointcloud_sub_ = nh_.subscribe("rt_accumulated_heightmap_pointcloud_odomrelative/output", 1, &SteppableRegionPublisher::pointcloudCallback, this);
-  median_image_ = cv::Mat::zeros(250, 250, CV_32FC3);
-  median_image2_ = cv::Mat::zeros(250, 250, CV_32FC3);
+  median_image_ = cv::Mat::zeros(500, 500, CV_32FC3);
+  median_image2_ = cv::Mat::zeros(500, 500, CV_32FC3);
   x_x_diff = 0;
   x_y_diff = 0;
   y_x_diff = 0;
@@ -101,6 +101,7 @@ void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::Onlin
     Eigen::Vector2d tmp;
     tmp = tmpmat.colPivHouseholderQr().solve(tmpvec);
     cur_foot_pos[2] = median_image_.at<cv::Vec3f>((int)(tmp[1]), (int)(tmp[0]))[2];
+    std::cout << "cur_pos" << tmp[1] << " " << tmp[0] << std::endl;
     //std::cout << x_x_diff << " " << x_y_diff << "  " << cur_foot_pos[0] << " " << cur_foot_pos[1] << "  " << median_image_.at<cv::Vec3f>(0, 0)[0] << " " << median_image_.at<cv::Vec3f>(0, 0)[1] << " " << median_image_.at<cv::Vec3f>(0, 0)[2] << "  " << tmp[0] << " " << tmp[1] << "  " << cur_foot_pos[2] << std::endl;
   }
 
@@ -140,102 +141,104 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   //pcl::PointCloud<pcl::Normal> cloud;
   pcl::fromROSMsg (*input, *cloud);
 
+  std::cout << "height,width: " << input->height << " " << input->width << std::endl;
 
   //fill infinite point
+  //heightとwidthの順番確認してない!!!
   x_x_diff = 0;
   x_y_diff = 0;
-  for (int y = 0; y < 500; y+=2) {
-    for (int x = 2; x < 500; x+=2) {
-      if (pcl::isFinite(cloud->points[y*500+x])) {
-        if (x_x_diff == 0 && pcl::isFinite(cloud->points[y*500+x-2])) { //連続してFiniteな部分を探し、diffを計算
-          x_x_diff = cloud->points[y*500+x].x - cloud->points[y*500+x-2].x;
-          x_y_diff = cloud->points[y*500+x].y - cloud->points[y*500+x-2].y;
+  for (int y = 0; y < input->height; y++) {
+    for (int x = 1; x < input->width; x++) {
+      if (pcl::isFinite(cloud->points[y*input->width+x])) {
+        if (x_x_diff == 0 && pcl::isFinite(cloud->points[y*input->width+x-1])) { //連続してFiniteな部分を探し、diffを計算
+          x_x_diff = cloud->points[y*input->width+x].x - cloud->points[y*input->width+x-1].x;
+          x_y_diff = cloud->points[y*input->width+x].y - cloud->points[y*input->width+x-1].y;
         }
       } else {
         //std::cout << "nan value: " << j << " " << i << " " << cloud->points[i*500+j].x << " " << cloud->points[i*500+j].y << " " << cloud->points[i*500+j].z << std::endl;
-        if (x_x_diff != 0 && pcl::isFinite(cloud->points[y*500+x-2])) { //inFiniteな部分には隣のzをコピー
-          cloud->points[y*500+x].x = cloud->points[y*500+x-2].x + x_x_diff;
-          cloud->points[y*500+x].y = cloud->points[y*500+x-2].y + x_y_diff;
-          cloud->points[y*500+x].z = cloud->points[y*500+x-2].z;
+        if (x_x_diff != 0 && pcl::isFinite(cloud->points[y*input->width+x-1])) { //inFiniteな部分には隣のzをコピー
+          cloud->points[y*input->width+x].x = cloud->points[y*input->width+x-1].x + x_x_diff;
+          cloud->points[y*input->width+x].y = cloud->points[y*input->width+x-1].y + x_y_diff;
+          cloud->points[y*input->width+x].z = cloud->points[y*input->width+x-1].z;
         }
       }
     }
   }
-  for (int i = 498; i >= 0; i-=2) {//逆順
-    for (int j = 496; j >= 0; j-=2) {
-      if ((!pcl::isFinite(cloud->points[i*500+j])) && pcl::isFinite(cloud->points[i*500+j+2])) { //inFiniteな部分には隣のzをコピー
-        cloud->points[i*500+j].x = cloud->points[i*500+j+2].x - x_x_diff;
-        cloud->points[i*500+j].y = cloud->points[i*500+j+2].y - x_y_diff;
-        cloud->points[i*500+j].z = cloud->points[i*500+j+2].z;
+  for (int i = input->height-1; i >= 0; i--) {//逆順
+    for (int j = input->width-2; j >= 0; j--) {
+      if ((!pcl::isFinite(cloud->points[i*input->width+j])) && pcl::isFinite(cloud->points[i*input->width+j+1])) { //inFiniteな部分には隣のzをコピー
+        cloud->points[i*input->width+j].x = cloud->points[i*input->width+j+1].x - x_x_diff;
+        cloud->points[i*input->width+j].y = cloud->points[i*input->width+j+1].y - x_y_diff;
+        cloud->points[i*input->width+j].z = cloud->points[i*input->width+j+1].z;
       }
     }
   }
   y_x_diff = 0;
   y_y_diff = 0;
-  for (int i = 2; i < 500; i+=2) {
-    for (int j = 0; j < 500; j+=2) {
-      if (pcl::isFinite(cloud->points[i*500+j])) {
-        if (y_x_diff == 0 && pcl::isFinite(cloud->points[(i-2)*500+j])) { //連続してFiniteな部分を探し、diffを計算
-          y_x_diff = cloud->points[i*500+j].x - cloud->points[(i-2)*500+j].x;
-          y_y_diff = cloud->points[i*500+j].y - cloud->points[(i-2)*500+j].y;
+  for (int i = 1; i < input->height; i++) {
+    for (int j = 0; j < input->width; j++) {
+      if (pcl::isFinite(cloud->points[i*input->width+j])) {
+        if (y_x_diff == 0 && pcl::isFinite(cloud->points[(i-1)*input->width+j])) { //連続してFiniteな部分を探し、diffを計算
+          y_x_diff = cloud->points[i*input->width+j].x - cloud->points[(i-1)*input->width+j].x;
+          y_y_diff = cloud->points[i*input->width+j].y - cloud->points[(i-1)*input->width+j].y;
         }
       } else {
-        if (y_x_diff != 0 && pcl::isFinite(cloud->points[(i-2)*500+j])) { //inFiniteな部分には隣のzをコピー
-          cloud->points[i*500+j].x = cloud->points[(i-2)*500+j].x + y_x_diff;
-          cloud->points[i*500+j].y = cloud->points[(i-2)*500+j].y + y_y_diff;
-          cloud->points[i*500+j].z = cloud->points[(i-2)*500+j].z;
+        if (y_x_diff != 0 && pcl::isFinite(cloud->points[(i-1)*input->width+j])) { //inFiniteな部分には隣のzをコピー
+          cloud->points[i*input->width+j].x = cloud->points[(i-1)*input->width+j].x + y_x_diff;
+          cloud->points[i*input->width+j].y = cloud->points[(i-1)*input->width+j].y + y_y_diff;
+          cloud->points[i*input->width+j].z = cloud->points[(i-1)*input->width+j].z;
         }
       }
     }
   }
-  for (int i = 496; i >= 0; i-=2) {//逆順
-    for (int j = 498; j >= 0; j-=2) {
-      if ((!pcl::isFinite(cloud->points[i*500+j])) && pcl::isFinite(cloud->points[(i+2)*500+j])) { //inFiniteな部分には隣のzをコピー
-        cloud->points[i*500+j].x = cloud->points[(i+2)*500+j].x - y_x_diff;
-        cloud->points[i*500+j].y = cloud->points[(i+2)*500+j].y - y_y_diff;
-        cloud->points[i*500+j].z = cloud->points[(i+2)*500+j].z;
+  for (int i = input->height-2; i >= 0; i--) {//逆順
+    for (int j = input->width-1; j >= 0; j--) {
+      if ((!pcl::isFinite(cloud->points[i*input->width+j])) && pcl::isFinite(cloud->points[(i+1)*input->width+j])) { //inFiniteな部分には隣のzをコピー
+        cloud->points[i*input->width+j].x = cloud->points[(i+1)*input->width+j].x - y_x_diff;
+        cloud->points[i*input->width+j].y = cloud->points[(i+1)*input->width+j].y - y_y_diff;
+        cloud->points[i*input->width+j].z = cloud->points[(i+1)*input->width+j].z;
       }
     }
   }
 
   ros::Time a_time = ros::Time::now();
 
-  median_image_ = cv::Mat::zeros(250, 250, CV_32FC3);
-  median_image2_ = cv::Mat::zeros(250, 250, CV_32FC3);
+  median_image_ = cv::Mat::zeros(input->height, input->width, CV_32FC3);
+  median_image2_ = cv::Mat::zeros(input->height, input->width, CV_32FC3);
 
   //compress image size by a facter of four
-  for (int y = 0; y < 250; y++) {
-    for (int x = 0; x < 250; x++) {
-      if (!pcl::isFinite(cloud->points[(y*2)*500+x*2])) {
+  for (int y = 0; y < input->height; y++) {
+    for (int x = 0; x < input->width; x++) {
+      if (!pcl::isFinite(cloud->points[y*input->width+x])) {
         std::cout << "infinite aruyo " << x << " " << y << std::endl;
       } else {
-        median_image_.at<cv::Vec3f>(y, x)[0] = cloud->points[y*2*500+x*2].x;
-        median_image_.at<cv::Vec3f>(y, x)[1] = cloud->points[y*2*500+x*2].y;
-        median_image_.at<cv::Vec3f>(y, x)[2] = cloud->points[y*2*500+x*2].z;
+        median_image_.at<cv::Vec3f>(y, x)[0] = cloud->points[y*input->width+x].x;
+        median_image_.at<cv::Vec3f>(y, x)[1] = cloud->points[y*input->width+x].y;
+        median_image_.at<cv::Vec3f>(y, x)[2] = cloud->points[y*input->width+x].z;
       }
     }
   }
 
   ros::Time b_time = ros::Time::now();
 
-  cv::medianBlur(median_image_, median_image_, 3); //中央値を取る(x,y座標は3x3の中心になってしまう)
+  cv::medianBlur(median_image_, median_image_, 5); //中央値を取る(x,y座標は3x3の中心になってしまう)
   cv::medianBlur(median_image_, median_image2_, 5); //中央値を取る(x,y座標は3x3の中心になってしまう)
   //cv::blur(median_image_, median_image_, cv::Size(3, 3));
   //cv::dilate(median_image_, median_image_, cv::Mat(), cv::Point(-1, -1), 1);
 
   ros::Time c_time = ros::Time::now();
 
-  cv::Mat binarized_image = cv::Mat::zeros(250, 250, CV_8UC1);
-  cv::Mat image = cv::Mat::zeros(250, 250, CV_8UC3);
-  int steppable_range = 3;
-  float steppable_edge_height = steppable_range*0.02*std::tan(0.33); //0.33
-  float steppable_corner_height = steppable_range*0.02*std::sqrt(2)*std::tan(0.33);//0.33
-  float steppable_around_edge_range = 12.0/2;//[cm]/[cm] 18
-  float steppable_around_corner_range = (int)(12.0/std::sqrt(8));//[cm]/[cm]
+  cv::Mat binarized_image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC1);
+  cv::Mat image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC3);
+  int steppable_range = 5;
+  float steppable_edge_height = steppable_range*0.01*std::tan(0.33); //0.33
+  float steppable_corner_height = steppable_range*0.01*std::sqrt(2)*std::tan(0.33);//0.33
+  float steppable_around_edge_range = 17.0/1;//[cm]/[cm] 18
+  float steppable_around_corner_range = (int)(17.0/std::sqrt(2));//[cm]/[cm]
   float steppable_around_height_diff = 0.05;//[m]
 
-  for (int x = (int)(steppable_around_edge_range); x < (250-(int)(steppable_around_edge_range)); x++) {
-    for (int y = (int)(steppable_around_edge_range); y < (250-(int)(steppable_around_edge_range)); y++) {
+  for (int x = (int)(steppable_around_edge_range); x < (median_image_.cols-(int)(steppable_around_edge_range)); x++) {
+    for (int y = (int)(steppable_around_edge_range); y < (median_image_.rows-(int)(steppable_around_edge_range)); y++) {
       cv::Vec3f center = median_image_.at<cv::Vec3f>(y, x);
 
       //if (
@@ -327,7 +330,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
     if (hierarchy[j][3] == -1) { //外側
       if (cv::contourArea(contours[j]) > size_threshold) {
         std::vector<cv::Point> approx;
-        cv::approxPolyDP(contours[j], approx, 1.5, true);//1.5
+        cv::approxPolyDP(contours[j], approx, 0.9, true);//1.5
         if (approx.size() >= 3) {
           approx_vector.push_back(approx);
           TPPLPoly poly;
@@ -376,7 +379,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
     //for (int j = 0; j < iter->GetNumPoints(); j++) {
     for (int j = iter->GetNumPoints() - 1; j >= 0; j--) {
       image.at<cv::Vec3b>(-iter->GetPoint(j).y, iter->GetPoint(j).x)[2] = 255;
-      int p1 = 500 * (-iter->GetPoint(j).y*2) + (iter->GetPoint(j).x*2);
+      int p1 = input->width * (-iter->GetPoint(j).y) + (iter->GetPoint(j).x);
       if (pcl::isFinite(cloud->points[p1])) {
         geometry_msgs::Point32 p;
         p.x = median_image2_.at<cv::Vec3f>(-iter->GetPoint(j).y, iter->GetPoint(j).x)[0];
@@ -434,39 +437,32 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
 
   // debug
   // size_t mesh_num(4);
-  // size_t mesh_num(2);
   // std::vector<bool> is_combined(mesh_num, false);
   // meshes.resize(mesh_num);
-  // meshes[0].push_back(Eigen::Vector3f(0, 0, 0));
-  // meshes[0].push_back(Eigen::Vector3f(500, 0, 0));
-  // meshes[0].push_back(Eigen::Vector3f(700, 500, 0));
-  // meshes[1].push_back(Eigen::Vector3f(400, 800, 0));
-  // meshes[1].push_back(Eigen::Vector3f(700, 500, 0));
-  // meshes[1].push_back(Eigen::Vector3f(1000, 700, 0));
-  // meshes[2].push_back(Eigen::Vector3f(700, 500, 0));
-  // meshes[2].push_back(Eigen::Vector3f(400, 800, 0));
-  // meshes[2].push_back(Eigen::Vector3f(0, 0, 0));
-  // meshes[3].push_back(Eigen::Vector3f(1000, 700, 0));
-  // meshes[3].push_back(Eigen::Vector3f(650, 850, 0));
-  // meshes[3].push_back(Eigen::Vector3f(400, 800, 0));
-  // meshes[0].push_back(Eigen::Vector3f(0, 0, 0));
-  // meshes[0].push_back(Eigen::Vector3f(500, 0, 0));
-  // meshes[0].push_back(Eigen::Vector3f(700, 500, 0));
-  // meshes[0].push_back(Eigen::Vector3f(1000, 700, 0));
-  // meshes[0].push_back(Eigen::Vector3f(650, 850, 0));
-  // meshes[0].push_back(Eigen::Vector3f(400, 800, 0));
+  // // meshes[0].push_back(Eigen::Vector3f(0, 0, 0));
+  // // meshes[0].push_back(Eigen::Vector3f(500, 0, 0));
+  // // meshes[0].push_back(Eigen::Vector3f(700, 500, 0));
+  // // meshes[1].push_back(Eigen::Vector3f(400, 800, 0));
+  // // meshes[1].push_back(Eigen::Vector3f(700, 500, 0));
+  // // meshes[1].push_back(Eigen::Vector3f(1000, 700, 0));
+  // // meshes[2].push_back(Eigen::Vector3f(700, 500, 0));
+  // // meshes[2].push_back(Eigen::Vector3f(400, 800, 0));
+  // // meshes[2].push_back(Eigen::Vector3f(0, 0, 0));
+  // // meshes[3].push_back(Eigen::Vector3f(1000, 700, 0));
+  // // meshes[3].push_back(Eigen::Vector3f(650, 850, 0));
+  // // meshes[3].push_back(Eigen::Vector3f(400, 800, 0));
   // meshes[0].push_back(Eigen::Vector3f(-0.5, -1, 0));
   // meshes[0].push_back(Eigen::Vector3f(-0.5, 1, 0));
   // meshes[0].push_back(Eigen::Vector3f(0.5, 1, 0));
   // meshes[1].push_back(Eigen::Vector3f(-0.5, -1, 0));
   // meshes[1].push_back(Eigen::Vector3f(0.5, 1, 0));
   // meshes[1].push_back(Eigen::Vector3f(0.5, -1, 0));
-  // meshes[2].push_back(Eigen::Vector3f(700, -1000, 0));
-  // meshes[2].push_back(Eigen::Vector3f(700, 1000, 0));
-  // meshes[2].push_back(Eigen::Vector3f(1200, 1000, 0));
-  // meshes[3].push_back(Eigen::Vector3f(1200, 1000, 0));
-  // meshes[3].push_back(Eigen::Vector3f(1200, -1000, 0));
-  // meshes[3].push_back(Eigen::Vector3f(700, -1000, 0));
+  // meshes[2].push_back(Eigen::Vector3f(0.7, -1.3, 0));
+  // meshes[2].push_back(Eigen::Vector3f(0.7, 1.3, 0));
+  // meshes[2].push_back(Eigen::Vector3f(1.7, 1.3, 0));
+  // meshes[3].push_back(Eigen::Vector3f(0.7, -1.3, 0));
+  // meshes[3].push_back(Eigen::Vector3f(1.7, 1.3, 0));
+  // meshes[3].push_back(Eigen::Vector3f(1.7, -1.3, 0));
 
   // combine meshes
   for (size_t i = 0; i < meshes.size(); i++) {
