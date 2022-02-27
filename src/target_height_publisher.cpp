@@ -99,8 +99,8 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
     std::vector<pcl::PointXYZ>  next_az_vec_left, next_az_vec_right;
     pcl::PointXYZ pp;
     // Eigen::Vector3f pos_margin (0.05, 0, 0);
-    Eigen::Vector3f pos_margin_front (0.07, 0, 0);
-    Eigen::Vector3f pos_margin_rear (-0.07, 0, 0);
+    Eigen::Vector3f pos_margin_front (0.00, 0, 0);
+    Eigen::Vector3f pos_margin_rear (-0.00, 0, 0);
     Eigen::Vector3f pos_margin_left (0.0, 0.04, 0);
     Eigen::Vector3f pos_margin_right (0.0, -0.04, 0);
     pcl::PointIndices::Ptr indices (new pcl::PointIndices);
@@ -147,9 +147,10 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
         tmpvec << next_foot_pos(0) + pos_margin_right(0) - cloud_->points[0].x, next_foot_pos(1) + pos_margin_right(1) - cloud_->points[0].y;
         next_right = tmpmat.colPivHouseholderQr().solve(tmpvec);
 
+
         //int tmp = threshold/0.01;//heighmapの１ピクセルは1cm
-        int tmp = 4;
-        for (int x = (int)(next_front(0)) + 1 - tmp; x < (int)(next_front(0)) + 1 + tmp; x++) {
+        int tmp = 8;
+        for (int x = (int)(next_front(0)) + 1 - tmp*3/2; x < (int)(next_front(0)) + 1 + tmp*3/2; x++) {
           for (int y = (int)(next_front(1)) + 1 - tmp; y < (int)(next_front(1)) + 1 + tmp; y++) {
             next_az_front += cloud_->points[x+y*cloud_->width].z;
             count_next_front++;
@@ -157,7 +158,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             next_az_vec_front.push_back(cloud_->points[x+y*cloud_->width]);
           }
         }
-        for (int x = (int)(next_rear(0)) + 1 - tmp; x < (int)(next_rear(0)) + 1 + tmp; x++) {
+        for (int x = (int)(next_rear(0)) + 1 - tmp*3/2; x < (int)(next_rear(0)) + 1 + tmp*3/2; x++) {
           for (int y = (int)(next_rear(1)) + 1 - tmp; y < (int)(next_rear(1)) + 1 + tmp; y++) {
             next_az_rear += cloud_->points[x+y*cloud_->width].z;
             count_next_rear++;
@@ -256,10 +257,11 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             //                             cur_az_vec_rear[cur_az_vec_rear.size()/2]) * 2
             //                    + cur_foot_pos(2)) / 3;
             //std::cout << "next_az_vec: " << next_az_vec_front[next_az_vec_front.size()/4].z << " " << next_az_vec_rear[next_az_vec_rear.size()/4].z << std::endl;
-            if (std::abs(next_az_vec_front[next_az_vec_front.size()/4].z - next_az_vec_rear[next_az_vec_rear.size()/4].z) < 0.1) {
+            //if (std::abs(next_az_vec_front[next_az_vec_front.size()/4].z - next_az_vec_rear[next_az_vec_rear.size()/4].z) < 0.1) {
+            if (false) {
               front_indices->indices.insert(front_indices->indices.end(), rear_indices->indices.begin(), rear_indices->indices.end());
               indices = front_indices;
-            } else if (next_az_vec_front[next_az_vec_front.size()/4].z > next_az_vec_rear[next_az_vec_rear.size()/4].z) {
+            } else if (next_az_vec_front[next_az_vec_front.size()/2].z > next_az_vec_rear[next_az_vec_rear.size()/2].z) {
               indices = front_indices;
             } else {
               indices = rear_indices;
@@ -268,7 +270,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             ps.l_r = msg->l_r;
             // std::cerr << "height: " << limited_h << std::endl;
 
-            // estimage plane by RANSAC
+                        // estimage plane by RANSAC
             int minimun_indices = 10;
             pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
             pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
@@ -284,6 +286,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             seg.setMaxIterations(100);
             seg.segment(*inliers, *coefficients);
 
+
             if (inliers->indices.size() == 0) {
                 std::cerr <<  " no plane" << std::endl;
             }
@@ -298,7 +301,10 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
                 Eigen::Vector3f next_n = plane.getNormal();
                 next_n = cur_foot_rot.transpose() * next_n; // cur_foot relative
 
-                if (next_n(2) < 0.8) { //平面おかしい
+                if (next_n(2) < 0.6) { //平面おかしい
+                //  return;
+                //}
+                //if (false) {
                   ps.nx =  0;
                   ps.ny =  0;
                   ps.nz =  1;
@@ -335,10 +341,11 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
                 next_foot_pos(2) = next_az_vec_rear[next_az_vec_rear.size()/4].z + (next_az_vec_rear[next_az_vec_rear.size()/4].x - next_foot_pos(0)) * ps.nx / ps.nz + (next_az_vec_rear[next_az_vec_rear.size()/4].y - next_foot_pos(1)) * ps.ny / ps.nz;
               }
             } else {
-              if (std::abs(next_az_vec_front[next_az_vec_front.size()/4].z - next_az_vec_rear[next_az_vec_rear.size()/4].z) < 0.1) {
+              //if (std::abs(next_az_vec_front[next_az_vec_front.size()/4].z - next_az_vec_rear[next_az_vec_rear.size()/4].z) < 0.1) {
+              if (false) {
                 next_foot_pos(2) = (next_az_vec_front[next_az_vec_front.size()/2].z + next_az_vec_rear[next_az_vec_rear.size()/2].z) / 2.0;
               } else {
-                next_foot_pos(2) = std::max(next_az_vec_front[next_az_vec_front.size()/4].z, next_az_vec_rear[next_az_vec_rear.size()/4].z);
+                next_foot_pos(2) = std::max(next_az_vec_front[next_az_vec_front.size()/2].z, next_az_vec_rear[next_az_vec_rear.size()/2].z);
               }
             }
 
@@ -349,7 +356,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             // target height range is -0.2 <= target_height <= 0.2
 
 
-            if (std::abs(tmp_pos(2)) >= 0.2 || !std::isfinite(tmp_pos(2))) return;
+            if (std::abs(tmp_pos(2)) >= 0.3 || !std::isfinite(tmp_pos(2))) return;
             // double limited_h = std::min(0.2, std::max(-0.2,static_cast<double>(tmp_pos(2))));
             // ps.z = limited_h;
 
@@ -366,6 +373,7 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
             start_pos = tmp_cur_foot_rot.transpose() * cur_foot_rot * Eigen::Vector3f(ps.x, ps.y, ps.z);
             Eigen::Vector3f end_pos;
             end_pos = tmp_cur_foot_rot.transpose() * cur_foot_rot * Eigen::Vector3f(ps.x+0.3*ps.nx, ps.y+0.3*ps.ny, ps.z+0.3*ps.nz);
+
 
 
             // publish pose msg for visualize
@@ -400,9 +408,9 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
           std::cout << "zerodayo" << std::endl;
         }
         ros::Time c_time = ros::Time::now();
-        std::cout << "landing_height_publisher" << std::endl;
-        std::cout << "a_b  " << (b_time - a_time).sec << "s " << (int)((b_time - a_time).nsec / 1000000) << "ms" << std::endl;
-        std::cout << "b_c  " << (c_time - b_time).sec << "s " << (int)((c_time - b_time).nsec / 1000000) << "ms" << std::endl;
+        //std::cout << "landing_height_publisher" << std::endl;
+        //std::cout << "a_b  " << (b_time - a_time).sec << "s " << (int)((b_time - a_time).nsec / 1000000) << "ms" << std::endl;
+        //std::cout << "b_c  " << (c_time - b_time).sec << "s " << (int)((c_time - b_time).nsec / 1000000) << "ms" << std::endl;
     }
 }
 

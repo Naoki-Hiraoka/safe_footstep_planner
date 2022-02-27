@@ -101,7 +101,7 @@ void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::Onlin
     Eigen::Vector2d tmp;
     tmp = tmpmat.colPivHouseholderQr().solve(tmpvec);
     cur_foot_pos[2] = median_image_.at<cv::Vec3f>((int)(tmp[1]), (int)(tmp[0]))[2];
-    std::cout << "cur_pos" << tmp[1] << " " << tmp[0] << std::endl;
+    //std::cout << "cur_pos" << tmp[1] << " " << tmp[0] << std::endl;
     //std::cout << x_x_diff << " " << x_y_diff << "  " << cur_foot_pos[0] << " " << cur_foot_pos[1] << "  " << median_image_.at<cv::Vec3f>(0, 0)[0] << " " << median_image_.at<cv::Vec3f>(0, 0)[1] << " " << median_image_.at<cv::Vec3f>(0, 0)[2] << "  " << tmp[0] << " " << tmp[1] << "  " << cur_foot_pos[2] << std::endl;
   }
 
@@ -141,7 +141,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   //pcl::PointCloud<pcl::Normal> cloud;
   pcl::fromROSMsg (*input, *cloud);
 
-  std::cout << "height,width: " << input->height << " " << input->width << std::endl;
+  //std::cout << "height,width: " << input->height << " " << input->width << std::endl;
 
   //fill infinite point
   //heightとwidthの順番確認してない!!!
@@ -231,15 +231,25 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   cv::Mat binarized_image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC1);
   cv::Mat image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC3);
   int steppable_range = 5;
-  float steppable_edge_height = steppable_range*0.01*std::tan(0.33); //0.33
-  float steppable_corner_height = steppable_range*0.01*std::sqrt(2)*std::tan(0.33);//0.33
-  float steppable_around_edge_range = 17.0/1;//[cm]/[cm] 18
-  float steppable_around_corner_range = (int)(17.0/std::sqrt(2));//[cm]/[cm]
+  float steppable_edge_height = steppable_range*0.01*std::tan(0.20); //0.33
+  float steppable_corner_height = steppable_edge_height*std::sqrt(2);//0.33
+  float steppable_around_edge_range = 14.0/1;//[cm]/[cm] 18
+  float steppable_around_corner_range = (int)(14.0/std::sqrt(2));//[cm]/[cm]
   float steppable_around_height_diff = 0.05;//[m]
+
+  float front = 0;
+  float right = 0;
+  float left = 0;
+  float back = 0;
+  float center = 0;
+  bool front_flag = 0;
+  bool right_flag = 0;
+  bool left_flag = 0;
+  bool back_flag= 0;
 
   for (int x = (int)(steppable_around_edge_range); x < (median_image_.cols-(int)(steppable_around_edge_range)); x++) {
     for (int y = (int)(steppable_around_edge_range); y < (median_image_.rows-(int)(steppable_around_edge_range)); y++) {
-      cv::Vec3f center = median_image_.at<cv::Vec3f>(y, x);
+      //cv::Vec3f center = median_image_.at<cv::Vec3f>(y, x);
 
       //if (
       //  std::abs(center[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2]) > steppable_corner_height ||
@@ -252,34 +262,81 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
       //  std::abs(center[2] - median_image_.at<cv::Vec3f>(y+0, x-steppable_range)[2]) > steppable_edge_height) {
       //  continue;
       //}
+      front = (median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2] + median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2]) / 2.0;
+      front_flag = true;
+      if (front + steppable_edge_height < median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) {
+        front = median_image_.at<cv::Vec3f>(y-steppable_range, x)[2];
+        front_flag = false;
+      }
+      right = (median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] + median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2]) / 2.0;
+      right_flag = true;
+      if (right + steppable_edge_height < median_image_.at<cv::Vec3f>(y, x+steppable_range)[2]) {
+        right = median_image_.at<cv::Vec3f>(y, x+steppable_range)[2];
+        right_flag = false;
+      }
+      left = (median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2] + median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) / 2.0;
+      left_flag = true;
+      if (left + steppable_edge_height < median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) {
+        left = median_image_.at<cv::Vec3f>(y, x-steppable_range)[2];
+        left_flag = false;
+      }
+      back = (median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2] + median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2]) / 2.0;
+      back_flag = true;
+      if (back + steppable_edge_height < median_image_.at<cv::Vec3f>(y+steppable_range, x)[2]) {
+        back = median_image_.at<cv::Vec3f>(y+steppable_range, x)[2];
+        back_flag = false;
+      }
 
-      if (
-        2*(center[2] - median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) - (median_image_.at<cv::Vec3f>(y, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) > steppable_edge_height ||
-        2*(center[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) - (median_image_.at<cv::Vec3f>(y+steppable_range, x)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) > steppable_edge_height ||
-        2*(center[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2]) - (median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2]) > steppable_corner_height ||
-        2*(center[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) - (median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) > steppable_corner_height ||
-        std::abs(median_image_.at<cv::Vec3f>(y, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) > 2*steppable_edge_height ||
-        std::abs(median_image_.at<cv::Vec3f>(y+steppable_range, x)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) > 2*steppable_edge_height ||
-        std::abs(median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2]) > 2*steppable_corner_height ||
-        std::abs(median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) > 2*steppable_corner_height) {
+      if (std::abs(front + back - right - left) > steppable_edge_height*2) {
         continue;
       }
+      center = (front + back + right + left) / 4.0;
+      if (center + steppable_edge_height < median_image_.at<cv::Vec3f>(y, x)[2]) {
+        continue;
+      }
+
+      if (front_flag && std::abs(median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] + right - left) > steppable_edge_height) {
+        continue;
+      }
+      if (right_flag && std::abs(median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2] + back - front) > steppable_edge_height) {
+        continue;
+      }
+      if (left_flag && std::abs(median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2] + back - front) > steppable_edge_height) {
+        continue;
+      }
+      if (back_flag && std::abs(median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2] + right - left) > steppable_edge_height) {
+        continue;
+      }
+
+
+      //凸性の判断
+      //if (
+      //  2*(center[2] - median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) - (median_image_.at<cv::Vec3f>(y, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) > steppable_edge_height ||
+      //  2*(center[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) - (median_image_.at<cv::Vec3f>(y+steppable_range, x)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) > steppable_edge_height ||
+      //  2*(center[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2]) - (median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2]) > steppable_corner_height ||
+      //  2*(center[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) - (median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) > steppable_corner_height ||
+      //  std::abs(median_image_.at<cv::Vec3f>(y, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y, x-steppable_range)[2]) > 2*steppable_edge_height ||
+      //  std::abs(median_image_.at<cv::Vec3f>(y+steppable_range, x)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x)[2]) > 2*steppable_edge_height ||
+      //  std::abs(median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2]) > 2*steppable_corner_height ||
+      //  std::abs(median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2] - median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2]) > 2*steppable_corner_height) {
+      //  continue;
+      //}
 
       image.at<cv::Vec3b>(y, x)[0] = 100;
       image.at<cv::Vec3b>(y, x)[1] = 100;
       image.at<cv::Vec3b>(y, x)[2] = 100;
 
-      double center_height = std::max({
-        median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2],
-        median_image_.at<cv::Vec3f>(y-steppable_range, x)[2],
-        median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2],
-        median_image_.at<cv::Vec3f>(y, x-steppable_range)[2],
-        median_image_.at<cv::Vec3f>(y, x)[2],
-        median_image_.at<cv::Vec3f>(y, x+steppable_range)[2],
-        median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2],
-        median_image_.at<cv::Vec3f>(y+steppable_range, x)[2],
-        median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2]
-        });
+      //double center_height = std::max({
+      //  median_image_.at<cv::Vec3f>(y-steppable_range, x-steppable_range)[2],
+      //  median_image_.at<cv::Vec3f>(y-steppable_range, x)[2],
+      //  median_image_.at<cv::Vec3f>(y-steppable_range, x+steppable_range)[2],
+      //  median_image_.at<cv::Vec3f>(y, x-steppable_range)[2],
+      //  median_image_.at<cv::Vec3f>(y, x)[2],
+      //  median_image_.at<cv::Vec3f>(y, x+steppable_range)[2],
+      //  median_image_.at<cv::Vec3f>(y+steppable_range, x-steppable_range)[2],
+      //  median_image_.at<cv::Vec3f>(y+steppable_range, x)[2],
+      //  median_image_.at<cv::Vec3f>(y+steppable_range, x+steppable_range)[2]
+      //  });
 
       //if (
       //  median_image_.at<cv::Vec3f>(y+(int)(steppable_around_edge_range), x)[2] - center[2] > steppable_around_height_diff ||
@@ -293,14 +350,14 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
       //  continue;
       //}
       if (
-        median_image_.at<cv::Vec3f>(y+(int)(steppable_around_edge_range), x)[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y, x+(int)(steppable_around_edge_range))[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y-(int)(steppable_around_edge_range), x)[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y, x-(int)(steppable_around_edge_range))[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y+(int)(steppable_around_corner_range), x+(int)(steppable_around_corner_range))[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y+(int)(steppable_around_corner_range), x-(int)(steppable_around_corner_range))[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y-(int)(steppable_around_corner_range), x+(int)(steppable_around_corner_range))[2] - center_height > steppable_around_height_diff ||
-        median_image_.at<cv::Vec3f>(y-(int)(steppable_around_corner_range), x-(int)(steppable_around_corner_range))[2] - center_height > steppable_around_height_diff) {
+        median_image_.at<cv::Vec3f>(y+(int)(steppable_around_edge_range), x)[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y, x+(int)(steppable_around_edge_range))[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y-(int)(steppable_around_edge_range), x)[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y, x-(int)(steppable_around_edge_range))[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y+(int)(steppable_around_corner_range), x+(int)(steppable_around_corner_range))[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y+(int)(steppable_around_corner_range), x-(int)(steppable_around_corner_range))[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y-(int)(steppable_around_corner_range), x+(int)(steppable_around_corner_range))[2] - center > steppable_around_height_diff ||
+        median_image_.at<cv::Vec3f>(y-(int)(steppable_around_corner_range), x-(int)(steppable_around_corner_range))[2] - center > steppable_around_height_diff) {
         continue;
       }
       binarized_image.at<uchar>(y, x) = 255;
@@ -317,7 +374,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
 
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_CLOSE, cv::noArray(), cv::Point(-1, -1), 2);
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN,  cv::noArray(), cv::Point(-1, -1), 1);
-  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 1);//3
+  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 5);//3
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN, cv::noArray(), cv::Point(-1, -1), 1);
   std::vector<std::vector<cv::Point>> contours;
   std::vector<cv::Vec4i> hierarchy;
