@@ -76,7 +76,8 @@ void TargetHeightPublisher::targetCallback(const safe_footstep_planner::OnlineFo
     tf::StampedTransform transform;
     // listener_.lookupTransform("/body_on_odom", target_frame, ros::Time(0), transform); // map relative to target_frame
     // listener_.lookupTransform("/odom_ground", target_frame, ros::Time(0), transform); // map relative to target_frame
-    listener_.lookupTransform(cloud_->header.frame_id, target_frame, ros::Time(0), transform); // map relative to target_frame
+    listener_.waitForTransform(cloud_->header.frame_id, target_frame, msg->header.stamp, ros::Duration(3.0));
+    listener_.lookupTransform(cloud_->header.frame_id, target_frame, msg->header.stamp, transform); // map relative to target_frame
     Eigen::Vector3f cur_foot_pos, ez(Eigen::Vector3f::UnitZ());
     safe_footstep_util::vectorTFToEigen(transform.getOrigin(), cur_foot_pos);
     Eigen::Matrix3f tmp_cur_foot_rot, cur_foot_rot;
