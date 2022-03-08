@@ -228,7 +228,8 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
 
   ros::Time c_time = ros::Time::now();
 
-  cv::Mat binarized_image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC1);
+  cv::Mat binarized_image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC1); // 上り段差を棄却する
+  cv::Mat binarized_image_wo_steppable_around_height = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC1); // 上り段差を棄却しない
   cv::Mat image = cv::Mat::zeros(median_image_.cols, median_image_.rows, CV_8UC3);
   int steppable_range = 5;
   float steppable_edge_height = steppable_range*0.01*std::tan(0.20); //0.33
@@ -322,6 +323,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
       //  continue;
       //}
 
+      binarized_image_wo_steppable_around_height.at<uchar>(y, x) = 255;
       image.at<cv::Vec3b>(y, x)[0] = 100;
       image.at<cv::Vec3b>(y, x)[1] = 100;
       image.at<cv::Vec3b>(y, x)[2] = 100;
@@ -372,10 +374,21 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   std::vector<std::vector<cv::Point>> approx_vector;
   std::list<TPPLPoly> polys, result;
 
+  cv::morphologyEx(binarized_image_wo_steppable_around_height, binarized_image_wo_steppable_around_height, CV_MOP_CLOSE, cv::noArray(), cv::Point(-1, -1), 2);
+  cv::morphologyEx(binarized_image_wo_steppable_around_height, binarized_image_wo_steppable_around_height, CV_MOP_OPEN,  cv::noArray(), cv::Point(-1, -1), 1);
+  cv::erode(binarized_image_wo_steppable_around_height, binarized_image_wo_steppable_around_height, cv::noArray(), cv::Point(-1, -1), 5);//3
+  cv::morphologyEx(binarized_image_wo_steppable_around_height, binarized_image_wo_steppable_around_height, CV_MOP_OPEN, cv::noArray(), cv::Point(-1, -1), 1);
+
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_CLOSE, cv::noArray(), cv::Point(-1, -1), 2);
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN,  cv::noArray(), cv::Point(-1, -1), 1);
-  cv::erode(binarized_image, binarized_image, cv::noArray(), cv::Point(-1, -1), 5);//3
   cv::morphologyEx(binarized_image, binarized_image, CV_MOP_OPEN, cv::noArray(), cv::Point(-1, -1), 1);
+
+  for (int x = 0; x < binarized_image.cols; x++) {
+    for (int y = 0; y < binarized_image.rows; y++) {
+      binarized_image.at<uchar>(y, x) = (binarized_image.at<uchar>(y, x)==255 && binarized_image_wo_steppable_around_height.at<uchar>(y, x)==255) ? 255 : 0;
+    }
+  }
+
   std::vector<std::vector<cv::Point>> contours;
   std::vector<cv::Vec4i> hierarchy;
   cv::findContours(binarized_image, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
