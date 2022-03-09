@@ -237,8 +237,8 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   int steppable_range = 5;
   float steppable_edge_height = steppable_range*0.01*std::tan(0.20); //0.33
   float steppable_corner_height = steppable_edge_height*std::sqrt(2);//0.33
-  float steppable_around_edge_range = 14.0/1;//[cm]/[cm] 18
-  float steppable_around_corner_range = (int)(14.0/std::sqrt(2));//[cm]/[cm]
+  float steppable_around_edge_range = 8.0/1;//[cm]/[cm] 18
+  float steppable_around_corner_range = (int)(8.0/std::sqrt(2));//[cm]/[cm]
   float steppable_around_height_diff = 0.05;//[m]
   float height_limit = 0.45;
 
