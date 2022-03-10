@@ -50,6 +50,7 @@ private:
   float x_y_diff;
   float y_x_diff;
   float y_y_diff;
+  float cur_foot_pos_z;
 };
 
 SteppableRegionPublisher::SteppableRegionPublisher() : nh_(""), pnh_("~")
@@ -67,6 +68,7 @@ SteppableRegionPublisher::SteppableRegionPublisher() : nh_(""), pnh_("~")
   x_y_diff = 0;
   y_x_diff = 0;
   y_y_diff = 0;
+  cur_foot_pos_z = 0;
 }
 
 void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::OnlineFootStep::ConstPtr& msg)
@@ -101,7 +103,7 @@ void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::Onlin
     Eigen::Vector2d tmp;
     tmp = tmpmat.colPivHouseholderQr().solve(tmpvec);
     cur_foot_pos[2] = median_image_.at<cv::Vec3f>((int)(tmp[1]), (int)(tmp[0]))[2];
-    //std::cout << "cur_pos" << tmp[1] << " " << tmp[0] << std::endl;
+    cur_foot_pos_z = cur_foot_pos[2];
     //std::cout << x_x_diff << " " << x_y_diff << "  " << cur_foot_pos[0] << " " << cur_foot_pos[1] << "  " << median_image_.at<cv::Vec3f>(0, 0)[0] << " " << median_image_.at<cv::Vec3f>(0, 0)[1] << " " << median_image_.at<cv::Vec3f>(0, 0)[2] << "  " << tmp[0] << " " << tmp[1] << "  " << cur_foot_pos[2] << std::endl;
   }
 
@@ -109,6 +111,7 @@ void SteppableRegionPublisher::targetCallback(const safe_footstep_planner::Onlin
   header.frame_id = target_frame.substr(1, target_frame.length() - 1);
   // header.stamp = ros::Time::now();
   header.stamp = ros::Time(0);
+  //header.stamp = msg.header.stamp;
   sr.header = header;
   sr.l_r = msg->l_r;
   sr_vis.header = header;
@@ -236,6 +239,7 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
   float steppable_around_edge_range = 14.0/1;//[cm]/[cm] 18
   float steppable_around_corner_range = (int)(14.0/std::sqrt(2));//[cm]/[cm]
   float steppable_around_height_diff = 0.05;//[m]
+  float height_limit = 0.45;
 
   float front = 0;
   float right = 0;
@@ -249,6 +253,9 @@ void SteppableRegionPublisher::pointcloudCallback(const sensor_msgs::PointCloud2
 
   for (int x = (int)(steppable_around_edge_range); x < (median_image_.cols-(int)(steppable_around_edge_range)); x++) {
     for (int y = (int)(steppable_around_edge_range); y < (median_image_.rows-(int)(steppable_around_edge_range)); y++) {
+      if (std::abs(median_image_.at<cv::Vec3f>(y, x)[2] - cur_foot_pos_z) > height_limit) {
+        continue;
+      }
       //cv::Vec3f center = median_image_.at<cv::Vec3f>(y, x);
 
       //if (
